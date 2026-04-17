@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load .env before anything else so env vars are available at import time
 load_dotenv()
 
-from routers import auth, credits, jobs, lipsync, videos  # noqa: E402
+from routers import auth, credits, jobs, lipsync, payments, stripe_payments, videos  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -83,6 +83,8 @@ app.include_router(videos.router)
 app.include_router(lipsync.router)
 app.include_router(jobs.router)
 app.include_router(credits.router)
+app.include_router(payments.router)          # PayFast — ZAR (South Africa)
+app.include_router(stripe_payments.router)   # Stripe  — USD (international)
 
 # ---------------------------------------------------------------------------
 # Root / health endpoints

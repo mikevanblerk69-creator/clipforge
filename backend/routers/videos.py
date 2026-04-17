@@ -3,6 +3,16 @@ Video generation endpoints.
 
 POST /api/v1/video/text2video   — submit a text-to-video job
 POST /api/v1/video/image2video  — submit an image-to-video job (supports file upload)
+
+Payment gate (enforced on every generation endpoint)
+-----------------------------------------------------
+A request is rejected with HTTP 402 if ANY of the following is true:
+  • The user has zero credits remaining
+  • The user's payment_status is not 'confirmed'
+
+This means free / welcome credits alone cannot trigger generation — the user
+must have completed a real, verified PayFast purchase first.
+(DEMO_MODE bypasses this check so local dev still works.)
 """
 
 from __future__ import annotations
@@ -24,7 +34,7 @@ from models.schemas import (
     VideoStyle,
 )
 from routers.auth import get_current_user
-from utils.credits import CREDIT_COSTS, check_sufficient_credits
+from utils.credits import CREDIT_COSTS, check_payment_confirmed, check_sufficient_credits
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/video", tags=["Video Generation"])
@@ -48,6 +58,41 @@ else:
 
 
 # ---------------------------------------------------------------------------
+# Payment gate helper
+# ---------------------------------------------------------------------------
+
+async def _enforce_payment_gate(user_id: str, required_credits: int) -> None:
+    """
+    Raise HTTP 402 if the user cannot generate videos.
+
+    Two checks must BOTH pass:
+      1. credits > 0 (and >= required)
+      2. payment_status == 'confirmed'   (real PayFast payment on file)
+
+    In DEMO_MODE both checks are skipped (check_payment_confirmed always
+    returns True and the demo credit store is pre-seeded).
+    """
+    if not await check_sufficient_credits(user_id, required_credits):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                f"Insufficient credits. This job requires {required_credits} credit(s). "
+                "Purchase a plan at /pricing to continue."
+            ),
+        )
+
+    if not await check_payment_confirmed(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                "Payment not yet confirmed. "
+                "Please complete a purchase at /pricing before generating videos. "
+                "If you just paid, it may take a few seconds for PayFast to confirm."
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
 # POST /text2video
 # ---------------------------------------------------------------------------
 
@@ -64,7 +109,7 @@ async def create_text2video(
 ) -> JobResponse:
     user_id: str = current_user["id"]
 
-    # Determine credit cost and verify balance before submitting
+    # Determine credit cost
     quality_val = str(request.quality)
     duration_val = int(request.duration)
     if quality_val == Quality.pro or duration_val >= int(Duration.long):
@@ -73,11 +118,9 @@ async def create_text2video(
         cost_key = "text2video_5s_standard"
 
     required = CREDIT_COSTS[cost_key]
-    if not await check_sufficient_credits(user_id, required):
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Insufficient credits. This job requires {required} credits.",
-        )
+
+    # --- PAYMENT GATE (credits AND payment confirmed) ---
+    await _enforce_payment_gate(user_id, required)
 
     job_response = await _video_service.submit_text2video(user_id, request)
     background_tasks.add_task(_video_service.process_job, job_response.job_id)
@@ -111,11 +154,9 @@ async def create_image2video(
     user_id: str = current_user["id"]
 
     required = CREDIT_COSTS["image2video"]
-    if not await check_sufficient_credits(user_id, required):
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail=f"Insufficient credits. This job requires {required} credits.",
-        )
+
+    # --- PAYMENT GATE (credits AND payment confirmed) ---
+    await _enforce_payment_gate(user_id, required)
 
     # Resolve image URL
     resolved_image_url: Optional[str] = image_url

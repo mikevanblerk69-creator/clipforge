@@ -4,8 +4,9 @@ Credit management using Supabase REST API (httpx).
 Schema assumptions
 ------------------
 Table: user_credits
-  user_id  TEXT PRIMARY KEY
-  balance  INTEGER NOT NULL DEFAULT 0
+  user_id         TEXT PRIMARY KEY
+  balance         INTEGER NOT NULL DEFAULT 0
+  payment_status  TEXT DEFAULT 'pending'   -- 'pending' | 'confirmed'
 
 Table: credit_transactions
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY
@@ -96,6 +97,29 @@ def get_credits_used(user_id: str) -> int:
     if _is_demo():
         return _DEMO_CREDITS_USED.get(user_id, 0)
     return 0
+
+
+async def check_payment_confirmed(user_id: str) -> bool:
+    """
+    Return True if the user's payment_status is 'confirmed'.
+
+    In DEMO_MODE this always returns True so generation still works locally.
+    In production, a user must have completed a PayFast purchase first.
+    """
+    if _is_demo():
+        return True
+
+    supabase_url, service_key = _env_supabase()
+    url = f"{supabase_url}/rest/v1/user_credits?user_id=eq.{user_id}&select=payment_status"
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(url, headers=_headers(service_key))
+        resp.raise_for_status()
+        data = resp.json()
+
+    if not data:
+        return False
+    return data[0].get("payment_status") == "confirmed"
 
 
 async def deduct_credits(user_id: str, amount: int, reason: str) -> bool:

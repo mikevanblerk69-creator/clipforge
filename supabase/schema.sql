@@ -156,8 +156,9 @@ create trigger profiles_updated_at
 -- USER_CREDITS TABLE (used by backend credits utility)
 -- ============================================================
 create table if not exists public.user_credits (
-  user_id   text primary key,
-  balance   integer not null default 0
+  user_id        text primary key,
+  balance        integer not null default 0,
+  payment_status text not null default 'pending'  -- 'pending' | 'confirmed'
 );
 
 alter table public.user_credits enable row level security;
@@ -168,6 +169,54 @@ create policy "Users can view own credits"
 
 create policy "Service role full access to user_credits"
   on public.user_credits for all
+  using (auth.role() = 'service_role');
+
+-- Add payment_status column to existing deployments (safe to run multiple times)
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'user_credits' and column_name = 'payment_status'
+  ) then
+    alter table public.user_credits
+      add column payment_status text not null default 'pending';
+  end if;
+end $$;
+
+-- ============================================================
+-- PAYFAST TRANSACTIONS TABLE
+-- Stores every PayFast ITN that passes all validation checks.
+-- Provides a complete audit trail: payment ID, amount, profit,
+-- and the credits granted — separate from the running
+-- credit_transactions history so finance can reconcile easily.
+-- ============================================================
+create table if not exists public.payfast_transactions (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         text not null,                   -- auth.users UUID as text (matches user_credits.user_id)
+  package_key     text not null,                   -- 'starter' | 'pro' | 'studio'
+  credits_granted integer not null,
+  amount_paid     decimal(10,2) not null,           -- gross amount received from PayFast (ZAR)
+  profit          decimal(10,2) not null,           -- amount_paid - api_cost
+  pf_payment_id   text,                            -- PayFast's own payment reference
+  status          text not null default 'confirmed',
+  created_at      timestamptz not null default now()
+);
+
+-- Indexes
+create index if not exists payfast_tx_user_id_idx   on public.payfast_transactions(user_id);
+create index if not exists payfast_tx_created_at_idx on public.payfast_transactions(created_at desc);
+create index if not exists payfast_tx_pf_id_idx     on public.payfast_transactions(pf_payment_id);
+
+-- Enable RLS
+alter table public.payfast_transactions enable row level security;
+
+-- Users can see their own purchase history
+create policy "Users can view own payfast transactions"
+  on public.payfast_transactions for select
+  using (auth.uid()::text = user_id);
+
+-- Only the service role (backend) can write
+create policy "Service role full access to payfast_transactions"
+  on public.payfast_transactions for all
   using (auth.role() = 'service_role');
 
 -- ============================================================
@@ -281,3 +330,65 @@ group by p.id, p.email, p.credits;
 -- Grant access to the view
 grant select on public.user_stats to authenticated;
 grant select on public.user_stats to service_role;
+
+-- ============================================================
+-- STRIPE TRANSACTIONS TABLE
+-- Stores every successful Stripe Checkout Session.
+-- ============================================================
+create table if not exists public.stripe_transactions (
+  id                  uuid primary key default gen_random_uuid(),
+  user_id             text not null,
+  package_key         text not null,
+  credits_granted     integer not null,
+  amount_paid_cents   integer not null,          -- USD cents
+  stripe_session_id   text unique,
+  status              text not null default 'confirmed',
+  created_at          timestamptz not null default now()
+);
+
+create index if not exists stripe_tx_user_id_idx      on public.stripe_transactions(user_id);
+create index if not exists stripe_tx_created_at_idx   on public.stripe_transactions(created_at desc);
+create index if not exists stripe_tx_session_id_idx   on public.stripe_transactions(stripe_session_id);
+
+alter table public.stripe_transactions enable row level security;
+
+create policy "Users can view own stripe transactions"
+  on public.stripe_transactions for select
+  using (auth.uid()::text = user_id);
+
+create policy "Service role full access to stripe_transactions"
+  on public.stripe_transactions for all
+  using (auth.role() = 'service_role');
+
+-- ============================================================
+-- APPSUMO CODES TABLE
+-- Pre-loaded by admin; each row is one redeemable LTD code.
+-- ============================================================
+create table if not exists public.appsumo_codes (
+  code          text primary key,                -- e.g. CF-A1B2-C3D4-E5F6
+  tier          integer not null default 1,      -- 1 | 2 | 3 (for reference only)
+  redeemed_by   text,                            -- user_id who redeemed it
+  redeemed_at   timestamptz
+);
+
+create index if not exists appsumo_codes_redeemed_by_idx on public.appsumo_codes(redeemed_by);
+
+alter table public.appsumo_codes enable row level security;
+
+-- Users cannot read the codes table (no enumeration)
+create policy "Service role full access to appsumo_codes"
+  on public.appsumo_codes for all
+  using (auth.role() = 'service_role');
+
+-- ============================================================
+-- USER_CREDITS — add account_type column for LTD users
+-- ============================================================
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_name = 'user_credits' and column_name = 'account_type'
+  ) then
+    alter table public.user_credits
+      add column account_type text not null default 'standard';  -- 'standard' | 'ltd'
+  end if;
+end $$;
