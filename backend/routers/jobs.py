@@ -127,7 +127,7 @@ async def get_history(
 
 @router.delete(
     "/history/{video_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Delete a video from the user's history",
 )
 async def delete_history_item(
