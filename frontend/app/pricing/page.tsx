@@ -60,6 +60,7 @@ const ZAR_PACKAGES = [
     tagline: 'Perfect for trying ClipForge',
     amount: 99,
     credits: 10,
+    paymentLink: 'https://payf.st/fzx8h',
     icon: Zap,
     costPerVideo: 'R9.90 / video',
     popular: false,
@@ -80,6 +81,7 @@ const ZAR_PACKAGES = [
     tagline: 'Best value for regular creators',
     amount: 199,
     credits: 25,
+    paymentLink: 'https://payf.st/d6ofg',
     icon: Film,
     costPerVideo: 'R7.96 / video',
     popular: true,
@@ -101,6 +103,7 @@ const ZAR_PACKAGES = [
     tagline: 'High-volume production studio',
     amount: 399,
     credits: 60,
+    paymentLink: 'https://payf.st/rkcu6',
     icon: Clapperboard,
     costPerVideo: 'R6.65 / video',
     popular: false,
@@ -296,26 +299,10 @@ function PricingInner() {
     form.submit()
   }, [])
 
-  const handlePayFast = useCallback(async (packageKey: string) => {
-    setError(null)
-    if (!sessionChecked) return
-    if (!token) { router.push(`/auth/signin?redirect=/pricing`); return }
-    setLoadingPackage(packageKey)
-    try {
-      const res = await fetch(`${API_BASE}/payments/create-payment?package_key=${packageKey}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error((body as { detail?: string }).detail ?? `Server error ${res.status}`)
-      }
-      submitToPayFast(await res.json())
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
-      setLoadingPackage(null)
-    }
-  }, [token, sessionChecked, router, submitToPayFast])
+  const handlePayFast = useCallback((packageKey: string) => {
+    const pkg = ZAR_PACKAGES.find(p => p.key === packageKey)
+    if (pkg?.paymentLink) window.location.href = pkg.paymentLink
+  }, [])
 
   // ── Stripe (USD) ─────────────────────────────────────────────────────────
 
