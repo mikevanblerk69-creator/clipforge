@@ -147,7 +147,10 @@ class VideoService:
         }
 
         await self._insert_job_record(job_record)
-        await self._queue.enqueue_job(job_record)
+        try:
+            await self._queue.enqueue_job(job_record)
+        except Exception as exc:
+            logger.warning("Queue unavailable for job %s (continuing): %s", job_id, exc)
 
         estimated = 120 if str(request.quality) == "standard" else 240
 
@@ -181,7 +184,10 @@ class VideoService:
         }
 
         await self._insert_job_record(job_record)
-        await self._queue.enqueue_job(job_record)
+        try:
+            await self._queue.enqueue_job(job_record)
+        except Exception as exc:
+            logger.warning("Queue unavailable for job %s (continuing): %s", job_id, exc)
 
         return JobResponse(
             job_id=job_id,
@@ -212,7 +218,10 @@ class VideoService:
         }
 
         await self._insert_job_record(job_record)
-        await self._queue.enqueue_job(job_record)
+        try:
+            await self._queue.enqueue_job(job_record)
+        except Exception as exc:
+            logger.warning("Queue unavailable for job %s (continuing): %s", job_id, exc)
 
         return JobResponse(
             job_id=job_id,
@@ -282,7 +291,10 @@ class VideoService:
             await self._update_job_record(
                 job_id, {"provider_job_id": replicate_job_id, "progress": 10}
             )
-            await self._queue.update_job(job_id, {"provider_job_id": replicate_job_id})
+            try:
+                await self._queue.update_job(job_id, {"provider_job_id": replicate_job_id})
+            except Exception:
+                pass
 
             # Poll until Replicate finishes
             final = await poll_until_complete(
