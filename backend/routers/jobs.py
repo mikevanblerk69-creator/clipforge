@@ -49,8 +49,10 @@ def _sb_headers(service_key: str) -> dict[str, str]:
 
 
 def _supabase_base() -> tuple[str, str]:
-    url = os.environ["SUPABASE_URL"].rstrip("/")
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    if not url or not key:
+        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
     return url, key
 
 
@@ -125,7 +127,7 @@ async def get_history(
 
 @router.delete(
     "/history/{video_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
     summary="Delete a video from the user's history",
 )
 async def delete_history_item(

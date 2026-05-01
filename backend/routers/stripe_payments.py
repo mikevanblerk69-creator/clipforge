@@ -100,8 +100,10 @@ APPSUMO_CREDITS_PER_CODE = 2_400
 # ---------------------------------------------------------------------------
 
 def _sb_env() -> tuple[str, str]:
-    url = os.environ["SUPABASE_URL"].rstrip("/")
-    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    if not url or not key:
+        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
     return url, key
 
 
