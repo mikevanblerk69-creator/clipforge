@@ -1,12 +1,15 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   Zap, Film, Clapperboard, Check, ArrowLeft,
   AlertCircle, CheckCircle2, Loader2, ShieldCheck, Lock, Star, Sparkles,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 const PACKAGES = [
   {
@@ -15,13 +18,12 @@ const PACKAGES = [
     tagline: 'Perfect for trying ClipForge',
     amount: 99,
     credits: 10,
-    paymentLink: 'https://payf.st/fzx8h',
     icon: Zap,
     costPerVideo: 'R9.90 / video',
     popular: false,
     glowColor: 'rgba(6, 182, 212, 0.25)',
     borderFrom: '#06b6d4',
-    ctaClass: 'bg-white/10 hover:bg-white/20 text-white border border-white/10 hover:border-white/20',
+    ctaClass: 'bg-white/10 hover:bg-white/20 text-white border border-white/10 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed',
     features: [
       '10 HD video generations',
       'Text-to-video & image-to-video',
@@ -36,13 +38,12 @@ const PACKAGES = [
     tagline: 'Best value for regular creators',
     amount: 199,
     credits: 25,
-    paymentLink: 'https://payf.st/d6ofg',
     icon: Film,
     costPerVideo: 'R7.96 / video',
     popular: true,
     glowColor: 'rgba(249, 115, 22, 0.4)',
     borderFrom: '#f97316',
-    ctaClass: 'bg-orange-500 hover:bg-orange-400 text-black font-bold shadow-lg shadow-orange-500/30',
+    ctaClass: 'bg-orange-500 hover:bg-orange-400 text-black font-bold shadow-lg shadow-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed',
     features: [
       '25 HD video generations',
       'Text-to-video & image-to-video',
@@ -58,13 +59,12 @@ const PACKAGES = [
     tagline: 'High-volume production studio',
     amount: 399,
     credits: 60,
-    paymentLink: 'https://payf.st/rkcu6',
     icon: Clapperboard,
     costPerVideo: 'R6.65 / video',
     popular: false,
     glowColor: 'rgba(139, 92, 246, 0.25)',
     borderFrom: '#8b5cf6',
-    ctaClass: 'bg-white/10 hover:bg-white/20 text-white border border-white/10 hover:border-white/20',
+    ctaClass: 'bg-white/10 hover:bg-white/20 text-white border border-white/10 hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed',
     features: [
       '60 HD video generations',
       'Text-to-video & image-to-video',
@@ -134,8 +134,58 @@ function LaunchBanner() {
 
 function PricingInner() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const paymentSuccess   = searchParams.get('payment') === 'success'
   const paymentCancelled = searchParams.get('payment') === 'cancelled'
+  const [loading, setLoading] = useState<string | null>(null)
+  const [buyError, setBuyError] = useState<string | null>(null)
+
+  async function handleBuy(packageKey: string) {
+    setBuyError(null)
+    setLoading(packageKey)
+    try {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        router.push('/auth/login?redirect=/pricing')
+        return
+      }
+
+      const res = await fetch(
+        `${API_BASE}/payments/create-payment?package_key=${packageKey}`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+        }
+      )
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as any)?.detail || `Server error ${res.status}`)
+      }
+
+      const params = await res.json() as Record<string, string>
+      const { action_url, ...formFields } = params
+
+      // Build and auto-submit a hidden PayFast form
+      const form = document.createElement('form')
+      form.method = 'POST'
+      form.action = action_url
+      Object.entries(formFields).forEach(([k, v]) => {
+        const input = document.createElement('input')
+        input.type = 'hidden'
+        input.name = k
+        input.value = String(v)
+        form.appendChild(input)
+      })
+      document.body.appendChild(form)
+      form.submit()
+    } catch (err: any) {
+      setBuyError(err?.message || 'Failed to initiate payment. Please try again.')
+      setLoading(null)
+    }
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden text-white"
@@ -184,6 +234,12 @@ function PricingInner() {
             <p className="text-sm">Payment cancelled — no charge was made.</p>
           </div>
         )}
+        {buyError && (
+          <div className="mb-10 flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-red-300 backdrop-blur-sm">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <p className="text-sm">{buyError}</p>
+          </div>
+        )}
 
         {/* Hero */}
         <div className="mb-12 text-center">
@@ -203,6 +259,7 @@ function PricingInner() {
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-3">
           {PACKAGES.map((pkg) => {
             const Icon = pkg.icon
+            const isLoading = loading === pkg.key
             return (
               <div key={pkg.key}
                 className="group relative flex flex-col rounded-3xl p-px transition-transform duration-300 hover:-translate-y-1"
@@ -260,11 +317,17 @@ function PricingInner() {
                     ))}
                   </ul>
 
-                  <a href={pkg.paymentLink}
+                  <button
+                    onClick={() => handleBuy(pkg.key)}
+                    disabled={loading !== null}
                     className={`relative flex w-full items-center justify-center gap-2.5 overflow-hidden rounded-2xl px-5 py-4 text-sm font-semibold transition-all duration-200 ${pkg.ctaClass}`}>
-                    <Lock className="h-4 w-4" />
-                    Buy Now · R{pkg.amount}
-                  </a>
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Lock className="h-4 w-4" />
+                    )}
+                    {isLoading ? 'Redirecting to PayFast…' : `Buy Now · R${pkg.amount}`}
+                  </button>
                 </div>
               </div>
             )
