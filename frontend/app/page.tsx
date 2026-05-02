@@ -341,32 +341,32 @@ export default function LandingPage() {
               </div>
             </FadeIn>
 
-            {/* Pro (coming soon) */}
+            {/* Credit Packs */}
             <FadeIn delay={0.2}>
-              <div className="p-6 rounded-2xl border border-border bg-surface relative opacity-60">
+              <div className="p-6 rounded-2xl border border-cyan/40 bg-cyan/3 shadow-glow-cyan relative">
                 <div className="absolute -top-3 left-6">
-                  <span className="bg-surface-3 border border-border text-muted text-xs font-bold px-3 py-1 rounded-full">
-                    COMING SOON
+                  <span className="bg-cyan text-black text-xs font-bold px-3 py-1 rounded-full">
+                    TOP UP
                   </span>
                 </div>
                 <div className="mt-2 mb-5">
-                  <div className="text-4xl font-display text-muted mb-1">Pro</div>
-                  <div className="text-sm text-muted">Unlimited everything</div>
+                  <div className="text-4xl font-display text-cyan mb-1">From R99</div>
+                  <div className="text-sm text-muted">Credits never expire</div>
                 </div>
                 <ul className="space-y-2.5 mb-6">
                   {PRO_FEATURES.map((f) => (
                     <li key={f} className="flex items-start gap-2.5 text-sm">
-                      <Check className="w-4 h-4 text-muted flex-shrink-0 mt-0.5" />
-                      <span className="text-muted">{f}</span>
+                      <Check className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-foreground/80">{f}</span>
                     </li>
                   ))}
                 </ul>
-                <button
-                  disabled
-                  className="block w-full text-center py-3 bg-surface-3 text-muted font-semibold rounded-xl cursor-not-allowed"
+                <Link
+                  href="/pricing"
+                  className="block text-center py-3 bg-cyan hover:bg-cyan/80 text-black font-semibold rounded-xl transition-all duration-200 hover:-translate-y-0.5"
                 >
-                  Coming Soon
-                </button>
+                  View Packages
+                </Link>
               </div>
             </FadeIn>
           </div>
@@ -523,14 +523,14 @@ const FREE_FEATURES = [
 ]
 
 const PRO_FEATURES = [
-  'Unlimited monthly credits',
-  'Priority queue processing',
-  'Pro quality models',
-  'API access',
-  'Custom branding removal',
-  'Dedicated support',
-  'Early access to new features',
-  'Team collaboration (coming)',
+  'Starter — R99 for 10 credits',
+  'Pro — R199 for 25 credits',
+  'Studio — R399 for 60 credits',
+  'Credits never expire',
+  'Top up anytime, no subscription',
+  'Same-day delivery to your account',
+  'All video types included',
+  'ZAR pricing via PayFast',
 ]
 
 const TESTIMONIALS = [
